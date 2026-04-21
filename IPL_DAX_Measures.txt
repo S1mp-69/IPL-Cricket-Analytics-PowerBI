@@ -1,0 +1,265 @@
+================================================================================
+  IPL CRICKET ANALYTICS - POWER BI DAX MEASURES
+  Project: IPL + Cricket Performance Dashboard (2020-2024)
+================================================================================
+
+------------------------------------------------------------------------
+TABLE: MATCH-LEVEL MEASURES
+------------------------------------------------------------------------
+
+-- Total Matches Played
+Total Matches = COUNTROWS(ipl_matches)
+
+-- Total Matches Won (use in Team filter context)
+Total Wins =
+CALCULATE(
+    COUNTROWS(ipl_matches),
+    ipl_matches[winner] = SELECTEDVALUE(ipl_matches[team1])
+)
+
+-- Win Percentage
+Win % =
+VAR TotalGames =
+    CALCULATE(
+        COUNTROWS(ipl_matches),
+        FILTER(
+            ipl_matches,
+            ipl_matches[team1] = SELECTEDVALUE(ipl_matches[team1]) ||
+            ipl_matches[team2] = SELECTEDVALUE(ipl_matches[team1])
+        )
+    )
+VAR Wins = [Total Wins]
+RETURN
+    DIVIDE(Wins, TotalGames, 0) * 100
+
+-- Average Team Score (1st Innings)
+Avg Team Score =
+AVERAGEX(ipl_matches, ipl_matches[team1_score])
+
+-- Toss Win to Match Win Conversion %
+Toss Win Match Win % =
+VAR TossWins =
+    CALCULATE(
+        COUNTROWS(ipl_matches),
+        ipl_matches[toss_winner] = SELECTEDVALUE(ipl_matches[winner])
+    )
+RETURN
+    DIVIDE(TossWins, [Total Matches], 0) * 100
+
+-- Highest Score in a Match
+Highest Team Score = MAX(ipl_matches[team1_score])
+
+-- Lowest Score in a Match
+Lowest Team Score = MIN(ipl_matches[team1_score])
+
+
+------------------------------------------------------------------------
+TABLE: BATTING MEASURES
+------------------------------------------------------------------------
+
+-- Total Runs Scored
+Total Runs = SUM(ipl_batting[runs])
+
+-- Total Balls Faced
+Total Balls Faced = SUM(ipl_batting[balls])
+
+-- Average Strike Rate
+Avg Strike Rate =
+AVERAGEX(
+    ipl_batting,
+    ipl_batting[strike_rate]
+)
+
+-- Batting Average
+Batting Average =
+VAR TotalRuns = SUM(ipl_batting[runs])
+VAR TotalDismissals =
+    CALCULATE(
+        COUNTROWS(ipl_batting),
+        ipl_batting[dismissal] <> "not out"
+    )
+RETURN
+    DIVIDE(TotalRuns, TotalDismissals, 0)
+
+-- Total Fours
+Total Fours = SUM(ipl_batting[fours])
+
+-- Total Sixes
+Total Sixes = SUM(ipl_batting[sixes])
+
+-- Boundary % (runs from boundaries / total runs)
+Boundary % =
+VAR BoundaryRuns = (SUM(ipl_batting[fours]) * 4) + (SUM(ipl_batting[sixes]) * 6)
+VAR TotalRuns = SUM(ipl_batting[runs])
+RETURN
+    DIVIDE(BoundaryRuns, TotalRuns, 0) * 100
+
+-- Centuries (100+ scores)
+Centuries =
+CALCULATE(
+    COUNTROWS(ipl_batting),
+    ipl_batting[runs] >= 100
+)
+
+-- Half Centuries (50-99)
+Half Centuries =
+CALCULATE(
+    COUNTROWS(ipl_batting),
+    ipl_batting[runs] >= 50 && ipl_batting[runs] < 100
+)
+
+-- Top Scorer (Orange Cap) - use in a Card visual
+Orange Cap Player =
+VAR TopRuns =
+    MAXX(
+        SUMMARIZE(ipl_batting, ipl_batting[player], "PlayerRuns", SUM(ipl_batting[runs])),
+        [PlayerRuns]
+    )
+RETURN
+    CALCULATE(
+        FIRSTNONBLANK(ipl_batting[player], 1),
+        FILTER(
+            SUMMARIZE(ipl_batting, ipl_batting[player], "PlayerRuns", SUM(ipl_batting[runs])),
+            [PlayerRuns] = TopRuns
+        )
+    )
+
+-- Runs per Match (consistency metric)
+Runs Per Match =
+DIVIDE(
+    SUM(ipl_batting[runs]),
+    DISTINCTCOUNT(ipl_batting[match_id]),
+    0
+)
+
+
+------------------------------------------------------------------------
+TABLE: BOWLING MEASURES
+------------------------------------------------------------------------
+
+-- Total Wickets
+Total Wickets = SUM(ipl_bowling[wickets])
+
+-- Total Overs Bowled
+Total Overs = SUM(ipl_bowling[overs])
+
+-- Economy Rate
+Economy Rate =
+DIVIDE(
+    SUM(ipl_bowling[runs_given]),
+    SUM(ipl_bowling[overs]),
+    0
+)
+
+-- Bowling Average (runs per wicket)
+Bowling Average =
+DIVIDE(
+    SUM(ipl_bowling[runs_given]),
+    SUM(ipl_bowling[wickets]),
+    0
+)
+
+-- Bowling Strike Rate (balls per wicket)
+Bowling Strike Rate =
+DIVIDE(
+    SUM(ipl_bowling[overs]) * 6,
+    SUM(ipl_bowling[wickets]),
+    0
+)
+
+-- 3-Wicket Hauls
+Three Wicket Hauls =
+CALCULATE(
+    COUNTROWS(ipl_bowling),
+    ipl_bowling[wickets] >= 3
+)
+
+-- Purple Cap Player (most wickets)
+Purple Cap Player =
+VAR TopWickets =
+    MAXX(
+        SUMMARIZE(ipl_bowling, ipl_bowling[bowler], "BowlerWickets", SUM(ipl_bowling[wickets])),
+        [BowlerWickets]
+    )
+RETURN
+    CALCULATE(
+        FIRSTNONBLANK(ipl_bowling[bowler], 1),
+        FILTER(
+            SUMMARIZE(ipl_bowling, ipl_bowling[bowler], "BowlerWickets", SUM(ipl_bowling[wickets])),
+            [BowlerWickets] = TopWickets
+        )
+    )
+
+-- Total Maidens
+Total Maidens = SUM(ipl_bowling[maidens])
+
+-- Wickets Per Match
+Wickets Per Match =
+DIVIDE(
+    SUM(ipl_bowling[wickets]),
+    DISTINCTCOUNT(ipl_bowling[match_id]),
+    0
+)
+
+
+------------------------------------------------------------------------
+TABLE: ADVANCED / COMBINED MEASURES
+------------------------------------------------------------------------
+
+-- Net Run Rate (NRR)
+NRR =
+VAR RunsScored = CALCULATE(SUM(ipl_batting[runs]), ipl_batting[team] = SELECTEDVALUE(ipl_matches[team1]))
+VAR RunsConceded = CALCULATE(SUM(ipl_batting[runs]), ipl_batting[team] <> SELECTEDVALUE(ipl_matches[team1]))
+VAR OversPlayed = CALCULATE(SUM(ipl_bowling[overs]), ipl_bowling[team] <> SELECTEDVALUE(ipl_matches[team1]))
+VAR OversBowled = CALCULATE(SUM(ipl_bowling[overs]), ipl_bowling[team] = SELECTEDVALUE(ipl_matches[team1]))
+RETURN
+    DIVIDE(RunsScored, OversPlayed, 0) - DIVIDE(RunsConceded, OversBowled, 0)
+
+-- Season Champion (use with season slicer)
+Season Champion =
+CALCULATE(
+    LASTNONBLANK(ipl_matches[winner], 1),
+    TOPN(1, ipl_matches, ipl_matches[match_id], DESC)
+)
+
+-- Match Result Distribution (Win by Runs vs Wickets)
+Wins By Runs =
+CALCULATE(
+    COUNTROWS(ipl_matches),
+    ipl_matches[win_margin_type] = "runs"
+)
+
+Wins By Wickets =
+CALCULATE(
+    COUNTROWS(ipl_matches),
+    ipl_matches[win_margin_type] = "wickets"
+)
+
+-- Player All-Round Score (batting + bowling index)
+AllRound Index =
+VAR BattingScore = DIVIDE([Total Runs], 100, 0)
+VAR BowlingScore = DIVIDE([Total Wickets], 10, 0)
+RETURN BattingScore + BowlingScore
+
+-- YoY Run Growth %
+YoY Run Growth % =
+VAR CurrentSeasonRuns =
+    CALCULATE(SUM(ipl_batting[runs]), FILTER(ipl_batting, ipl_batting[season] = MAX(ipl_batting[season])))
+VAR PrevSeasonRuns =
+    CALCULATE(SUM(ipl_batting[runs]), FILTER(ipl_batting, ipl_batting[season] = MAX(ipl_batting[season]) - 1))
+RETURN
+    DIVIDE(CurrentSeasonRuns - PrevSeasonRuns, PrevSeasonRuns, 0) * 100
+
+
+------------------------------------------------------------------------
+NOTES
+------------------------------------------------------------------------
+- All measures should be placed in a dedicated "Measures" table
+- Use SELECTEDVALUE() for single-select slicers (team, season, player)
+- Use ALLSELECTED() inside CALCULATE when you want to respect slicer
+  context but ignore other filters
+- For drill-through pages, set "match_id" or "player" as the drill field
+- Row-Level Security: define roles per team using
+  [team1] = USERPRINCIPALNAME() or a mapping table
+
+================================================================================
